@@ -1,2 +1,4 @@
 streamlit
-openai>=1.40.0
+from openai import OpenAI
+client = OpenAI()
+

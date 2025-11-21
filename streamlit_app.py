@@ -31,9 +31,12 @@ def _hash_args(api_key: str, question: str) -> str:
     m.update(question.encode("utf-8"))
     return m.hexdigest()
 
+
 @st.cache_data(show_spinner=True)
 def ask_gpt_cached(key_hash: str, question: str) -> str:
+    # 여기서만 client 생성
     client = OpenAI(api_key=st.session_state.api_key)
+
     response = client.responses.create(
         model="gpt-5-mini",
         input=question,

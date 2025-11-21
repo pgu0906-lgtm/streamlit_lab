@@ -24,6 +24,7 @@ if not st.session_state.api_key:
     st.stop()
 
 
+# --- gpt-5-mini 호출 함수 (캐시 적용) ---
 def _hash_args(api_key: str, question: str) -> str:
     m = hashlib.sha256()
     m.update(api_key.encode("utf-8"))
@@ -33,7 +34,9 @@ def _hash_args(api_key: str, question: str) -> str:
 
 @st.cache_data(show_spinner=True)
 def ask_gpt_cached(key_hash: str, question: str) -> str:
+    # 여기서만 client 생성
     client = OpenAI(api_key=st.session_state.api_key)
+
     response = client.responses.create(
         model="gpt-5-mini",
         input=question,
@@ -54,4 +57,3 @@ if st.button("질문 보내기"):
 
         st.subheader("모델 응답")
         st.write(answer)
-

@@ -1,64 +1,81 @@
-# pages/2_LibraryChatbot.py
 import streamlit as st
 from openai import OpenAI
 
-st.set_page_config(page_title="Library Chatbot", page_icon="📚")
 st.title("3. 국립부경대학교 도서관 챗봇")
 
-# --- API Key 확인 ---
-if "api_key" not in st.session_state or not st.session_state.api_key:
-    st.warning("먼저 메인 페이지에서 OpenAI API Key를 입력하세요.")
+# --- API Key ---
+if "api_key" not in st.session_state:
+    st.session_state.api_key = ""
+
+api_key_input = st.text_input(
+    "OpenAI API Key를 입력하세요 (필요시 다시 입력)",
+    type="password",
+    value=st.session_state.api_key,
+)
+
+if api_key_input and api_key_input != st.session_state.api_key:
+    st.session_state.api_key = api_key_input
+
+if not st.session_state.api_key:
+    st.warning("먼저 API Key를 입력하세요.")
     st.stop()
 
-client = OpenAI(api_key=st.session_state.api_key)
 
-# 🔽 여기 넣을 규정 텍스트는 네가 직접 복사해서 넣어야 함!
-LIB_RULES_TEXT = """
-여기에 국립부경대학교 도서관 규정 원문을 복사해서 넣으세요.
-예: 휴관일, 개관시간, 대출 가능 도서 권수, 연체 규정 등.
+def get_client() -> OpenAI:
+    return OpenAI(api_key=st.session_state.api_key)
+
+
+# 여기 문자열 안에 규정 텍스트를 그냥 복붙하면 됩니다.
+LIB_RULES = """
+여기에 '국립부경대학교 도서관 규정' 전문을 붙여넣으세요.
+(규정 - 지원 및 부속시설 - 국립부경대학교 도서관 규정 부분)
+예: 제1조(목적) ... 제2조(정의) ... 이런 식으로 전체 복사
 """
 
-if not LIB_RULES_TEXT.strip():
-    st.error("도서관 규정 텍스트를 넣어야 합니다!")
-    st.stop()
+st.markdown("### 규정집 기반 도서관 챗봇")
+st.write("이 챗봇은 **국립부경대학교 도서관 규정** 내용을 바탕으로만 답변합니다.")
 
-# --- 대화 메모리 ---
-if "lib_messages" not in st.session_state:
-    st.session_state.lib_messages = []
+if "lib_chat" not in st.session_state:
+    st.session_state.lib_chat = []
 
-# Clear 버튼
-if st.button("대화 초기화"):
-    st.session_state.lib_messages = []
-    st.success("대화 기록이 초기화되었습니다.")
-
-# 기존 메시지 표시
-for msg in st.session_state.lib_messages:
+for msg in st.session_state.lib_chat:
     with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+        st.write(msg["content"])
 
-# 사용자 입력
-if question := st.chat_input("도서관 규정에 대해 질문해보세요."):
-    st.chat_message("user").markdown(question)
-    st.session_state.lib_messages.append({"role": "user", "content": question})
+user_q = st.chat_input("도서관에 대해 궁금한 점을 질문해 보세요. (예: 학부생 책 대여 권수?)")
 
-    instructions = (
-        "너는 국립부경대학교 도서관 규정 안내 챗봇이다. "
-        "아래 규정 텍스트에 포함된 내용만 사용해서 답변해라. "
-        "규정에 없는 내용은 모른다고 답해라.\n\n"
-        "---[규정 시작]---\n"
-        f"{LIB_RULES_TEXT}\n"
-        "---[규정 끝]---"
+col1, _ = st.columns([1, 1])
+with col1:
+    clear = st.button("🧹 Clear (대화 초기화)")
+
+if clear:
+    st.session_state.lib_chat = []
+    st.rerun()
+
+if user_q:
+    st.session_state.lib_chat.append({"role": "user", "content": user_q})
+    with st.chat_message("user"):
+        st.write(user_q)
+
+    client = get_client()
+
+    system_prompt = (
+        "당신은 국립부경대학교 도서관 규정을 잘 아는 도우미입니다.\n"
+        "반드시 아래 규정(LIB_RULES) 내용에 근거해서만 대답해야 합니다.\n"
+        "규정에서 찾을 수 없으면 '규정에 해당 내용이 없습니다.'라고 답하세요.\n"
     )
 
     with st.chat_message("assistant"):
-        with st.spinner("규정을 분석하는 중..."):
+        with st.spinner("규정을 확인하는 중..."):
             response = client.responses.create(
                 model="gpt-5-mini",
-                input=question,
-                instructions=instructions
+                input=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "system", "content": f"[국립부경대학교 도서관 규정 전문]\n{LIB_RULES}"},
+                    {"role": "user", "content": user_q},
+                ],
             )
             answer = response.output_text
-            st.markdown(answer)
+            st.write(answer)
 
-    st.session_state.lib_messages.append({"role": "assistant", "content": answer})
-`
+    st.session_state.lib_chat.append({"role": "assistant", "content": answer})

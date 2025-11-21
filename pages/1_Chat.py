@@ -1,53 +1,81 @@
 import streamlit as st
 from openai import OpenAI
 
-st.set_page_config(page_title="Chat", page_icon="💬")
-st.title("2. Chat 페이지")
+st.title("2. Chat 페이지 (Responses API)")
 
-if "api_key" not in st.session_state or not st.session_state.api_key:
-    st.warning("먼저 메인 페이지에서 OpenAI API Key를 입력하세요.")
+# --- API Key ---
+if "api_key" not in st.session_state:
+    st.session_state.api_key = ""
+
+api_key_input = st.text_input(
+    "OpenAI API Key를 입력하세요 (필요시 다시 입력)",
+    type="password",
+    value=st.session_state.api_key,
+)
+
+if api_key_input and api_key_input != st.session_state.api_key:
+    st.session_state.api_key = api_key_input
+
+if not st.session_state.api_key:
+    st.warning("먼저 API Key를 입력하세요.")
     st.stop()
 
-client = OpenAI(api_key=st.session_state.api_key)
 
-# --- 메시지 메모리 초기화 ---
-if "chat_messages" not in st.session_state:
-    st.session_state.chat_messages = []
+def get_client() -> OpenAI:
+    return OpenAI(api_key=st.session_state.api_key)
 
-# --- Clear 버튼 ---
-if st.button("Clear 대화"):
-    st.session_state.chat_messages = []
-    st.success("대화를 초기화했습니다.")
 
-# --- 기존 메시지 출력 ---
-for msg in st.session_state.chat_messages:
+# --- 대화 히스토리 ---
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []  # [{"role": "user"/"assistant", "content": "..."}, ...]
+
+
+# 지금까지 대화 출력
+for msg in st.session_state.chat_history:
     with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+        st.write(msg["content"])
 
-# --- 사용자 입력 ---
-if prompt := st.chat_input("메시지를 입력하세요"):
-    # 사용자 메시지 화면 + 메모리 저장
-    st.chat_message("user").markdown(prompt)
-    st.session_state.chat_messages.append(
-        {"role": "user", "content": prompt}
-    )
+# 입력창 + Clear 버튼
+user_input = st.chat_input("메시지를 입력하세요")
 
-    # OpenAI로 기존 대화 모두 보내기 (간단 버전)
-    openai_messages = [
-        {"role": m["role"], "content": m["content"]}
-        for m in st.session_state.chat_messages
-    ]
+col1, _ = st.columns([1, 1])
+with col1:
+    clear = st.button("🧹 Clear (대화 초기화)")
+
+if clear:
+    st.session_state.chat_history = []
+    st.rerun()
+
+if user_input:
+    # 1) 유저 메시지 저장/표시
+    st.session_state.chat_history.append({"role": "user", "content": user_input})
+    with st.chat_message("user"):
+        st.write(user_input)
+
+    client = get_client()
+
+    # 대화를 하나의 문자열로 합치기 (간단 버전)
+    full_dialog = ""
+    for m in st.session_state.chat_history:
+        who = "사용자" if m["role"] == "user" else "챗봇"
+        full_dialog += f"{who}: {m['content']}\n"
 
     with st.chat_message("assistant"):
-        with st.spinner("답변 생성 중..."):
+        with st.spinner("생각 중..."):
             response = client.responses.create(
                 model="gpt-5-mini",
-                input=openai_messages,
+                input=[
+                    {
+                        "role": "user",
+                        "content": (
+                            "아래는 지금까지의 대화입니다.\n"
+                            f"{full_dialog}\n\n"
+                            "위 대화를 참고하여 마지막 사용자 메시지에 자연스럽게 한국어로 이어서 답변해 주세요."
+                        ),
+                    }
+                ],
             )
             answer = response.output_text
-            st.markdown(answer)
+            st.write(answer)
 
-    # 응답도 메모리에 저장
-    st.session_state.chat_messages.append(
-        {"role": "assistant", "content": answer}
-    )
+    st.session_state.chat_history.append({"role": "assistant", "content": answer})
